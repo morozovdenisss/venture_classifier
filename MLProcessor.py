@@ -1,9 +1,12 @@
+#Database & Plotting Imports
 import numpy as np
 import pandas as pd
 from pandas.plotting import scatter_matrix
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import seaborn as sns
+
+#Sklearn Imports
 from sklearn import preprocessing
 from sklearn import svm
 from sklearn.datasets import make_moons, make_circles, make_classification
@@ -27,18 +30,21 @@ from sklearn.tree import DecisionTreeClassifier
 
 """
 Knowledge base
-https://scikit-learn.org/stable/tutorial/machine_learning_map/index.html - Good Article
-
+Roadmap - https://scikit-learn.org/stable/tutorial/machine_learning_map/index.html
+Confusion Matrix - https://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html#sphx-glr-auto-examples-model-selection-plot-confusion-matrix-py
+Dimensions - https://scikit-learn.org/stable/auto_examples/neighbors/plot_nca_dim_reduction.html#sphx-glr-auto-examples-neighbors-plot-nca-dim-reduction-py
+Comparison Classifier - https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
 """
+
 # Min Max the Data - doesn't work, did it manually by dividing all values in columns by highest column value
 def minmax():
     min_max_scaler = preprocessing.MinMaxScaler()
     X_train_minmax = min_max_scaler.fit_transform(data)
-    print (X_train_minmax)
+    #print (X_train_minmax)
 
 # Open the file and separate into table by ";"
 data=pd.read_csv('CSV_ML_minmax.csv', sep=';', dtype=None)
-print (data.head)
+#print (data.head)
 
 # Split into labels and features - drop Successful as a target in Y
 y = data.Successful
@@ -49,15 +55,34 @@ X_Headers = X_Headers[:-1]
 
 # For Pairplots
 All_Headers = list(data.columns.values)
-sns_data = data[All_Headers]
-#sns_data = data[['Funding Status', 'Last Funding Type', 'Number of Investments', 'Estimated Revenue Range', 'Trademarks', 'Availability of the finished product']]
+#sns_data = data[All_Headers]
+sns_data = data[['Funding Status', 'Number of VC investors', 'Time between funding and foundation', 'Funding Amount', 'Number of Exits', 'Number of Investments - Funding', 'Founders Gender Diversity']]
+
+# All variables with positive accuracies
+'''
+sns_data = data[['Funding Status', 'Number of VC investors',
+       'Time between funding and foundation', 'Funding Amount', 'Uniqueness',
+       'Number of Exits', 'Number of Exits (IPO)',
+       'Number of Investments - Funding', 'IT Spend to Revenue', 'Specialized',
+       'Number of Portfolio Companies', 'Bounce Rate',
+       'Number of Partner Investments', 'Number of Investments - Founders',
+       'Biography', 'Number of Contacts',
+       'Educational background of the startup founders',
+       'Number of Lead Investments', 'Risk audacious',
+       'Frequency of news on public media', 'Patents - Product',
+       'Page Views / Visit Growth', 'Firm age', 'Founders Gender Diversity']]
+'''
 
 # Split by 20% train/test
 X_train, X_test, y_train, y_test=train_test_split(X,y,test_size=0.2)
+ 
+#Run prints below if the code breaks
+'''
 print(X_train.shape)
 print(X_test.shape)
 print('Xheaders', X_Headers)
 print('X', X.shape)
+'''
 
 # Simple Linear Regression
 def SLR():
@@ -67,7 +92,7 @@ def SLR():
     plt.xlabel('True values')
     plt.show() 
 
-#Confusion matrix - testing with Error Tolerance https://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html#sphx-glr-auto-examples-model-selection-plot-confusion-matrix-py
+#Confusion matrix - testing with Error Tolerance
 def Confusion():
     classifier = svm.SVC(kernel="linear", C=0.1).fit(X_train, y_train)
     np.set_printoptions(precision=2)
@@ -86,14 +111,12 @@ def Confusion():
         )
         disp.ax_.set_title(title)
     
-        print(title)
-        print(disp.confusion_matrix)
+        #print(title)
+        #print(disp.confusion_matrix)
     
     plt.show()
 
 # Dimensionality Reduction
-# https://scikit-learn.org/stable/auto_examples/neighbors/plot_nca_dim_reduction.html#sphx-glr-auto-examples-neighbors-plot-nca-dim-reduction-py
-
 def DimenRed():
     n_neighbors = 2
     random_state = 0
@@ -142,7 +165,7 @@ def DimenRed():
         )
     plt.show()
 
-#Feature Importance
+# Feature Importance
 # Based on Impurity
 def ImpurityPermutation():
     forest = RandomForestClassifier(random_state=0)
@@ -151,12 +174,15 @@ def ImpurityPermutation():
     std = np.std([tree.feature_importances_ for tree in forest.estimators_], axis=0)
     
     #Plot
-    forest_importances = pd.Series(importances, index=X_Headers)
+    forest_importances = pd.Series(importances, index=X_Headers)   
+    forest_importances = forest_importances.sort_values()
     fig, ax = plt.subplots()
     forest_importances.plot.bar(yerr=std, ax=ax)
+    
+    #print (std, forest_importances)
+    
     ax.set_title("Feature importances using MDI")
     ax.set_ylabel("Mean decrease in impurity")
-    
     fig.set_size_inches(18.5, 10.5, forward=True)
     fig.set_dpi(100)
     #fig.tight_layout()
@@ -189,6 +215,7 @@ def FeatImp():
         forest, X_test, y_test, n_repeats=10, random_state=42, n_jobs=2
     )     
     forest_importances = pd.Series(result.importances_mean, index=X_Headers)
+    forest_importances = forest_importances.sort_values()
     fig, ax = plt.subplots()
     forest_importances.plot.bar(yerr=result.importances_std, ax=ax)
     ax.set_title("Feature importances using permutation on full model")
@@ -197,9 +224,9 @@ def FeatImp():
     fig.set_dpi(100)
     plt.show()
 
-# Correlation Scatterplot
+# Correlation Scatterplot + Histograms (without independent variable)
 def correlation():
-    # FIGURE OUT HUE KEY ERROR
+    # FIGURE OUT HUE KEY ERROR with SNS
     map = sns.pairplot(sns_data, plot_kws={'alpha':0.5, 'edgecolor': 'k'})
     map.map_diag(plt.hist)
     map.map_upper(sns.kdeplot, shade =True)
@@ -217,7 +244,10 @@ def coefvariability():
         for model in cv_model['estimator']],
        columns=X.columns
     )
-    coefs.sort_values(X_Headers, ascending = True)
+    meds = coefs.median()
+    meds.sort_values(ascending = False, inplace = True)
+    coefs = coefs[meds.index]
+    #print (meds.index)
     plt.figure(figsize=(20, 18))
     sns.boxplot(data=coefs, orient='h', color='cyan', saturation=0.5)
     plt.axvline(x=0, color='.5')
@@ -230,18 +260,17 @@ def launch():
     coefvariability()
     #Confusion()
     #Feature Importance Calculations
-    #ImpurityPermutation()
-    #FeatImp()
-    #PermutationImportance()
+    ImpurityPermutation()
+    FeatImp()
+    PermutationImportance()
     #Correlation
 
-
-launch()
+for i in range(1,10):
+    launch()
 
 
 '''
 # Comparison Classifier- used it to get understanding on KNeighbors
-# https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
 def ComparClass():
     h = 0.02  # clarify this one
     
