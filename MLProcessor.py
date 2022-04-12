@@ -1,14 +1,11 @@
-#Database & Plotting Imports
 import numpy as np
 import pandas as pd
 from pandas.plotting import scatter_matrix
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import seaborn as sns
-
-#Sklearn Imports
 from sklearn import preprocessing
-from sklearn import svm
+from sklearn import svm, metrics
 from sklearn.datasets import make_moons, make_circles, make_classification
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
@@ -18,7 +15,7 @@ from sklearn.gaussian_process.kernels import RBF
 from sklearn.inspection import permutation_importance
 from sklearn.linear_model import LinearRegression as lm
 from sklearn.linear_model import RidgeCV
-from sklearn.metrics import ConfusionMatrixDisplay
+from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix, accuracy_score
 from sklearn.model_selection import train_test_split, cross_validate, RepeatedKFold
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier, NeighborhoodComponentsAnalysis
@@ -30,20 +27,14 @@ from sklearn.tree import DecisionTreeClassifier
 
 """
 Knowledge base
-Roadmap - https://scikit-learn.org/stable/tutorial/machine_learning_map/index.html
-Confusion Matrix - https://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html#sphx-glr-auto-examples-model-selection-plot-confusion-matrix-py
-Dimensions - https://scikit-learn.org/stable/auto_examples/neighbors/plot_nca_dim_reduction.html#sphx-glr-auto-examples-neighbors-plot-nca-dim-reduction-py
-Comparison Classifier - https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
+https://scikit-learn.org/stable/tutorial/machine_learning_map/index.html - Good Article
+
 """
 
-# Min Max the Data - doesn't work, did it manually by dividing all values in columns by highest column value
-def minmax():
-    min_max_scaler = preprocessing.MinMaxScaler()
-    X_train_minmax = min_max_scaler.fit_transform(data)
-    #print (X_train_minmax)
+# Create automatic Min Max Scaling between 0 - 1 in the future. Excel is much faster.
 
 # Open the file and separate into table by ";"
-data=pd.read_csv('CSV_ML_minmax.csv', sep=';', dtype=None)
+data=pd.read_csv('CSV_ML_Exits_minmax.csv', sep=';', dtype=None)
 #print (data.head)
 
 # Split into labels and features - drop Successful as a target in Y
@@ -92,31 +83,43 @@ def SLR():
     plt.xlabel('True values')
     plt.show() 
 
-#Confusion matrix - testing with Error Tolerance
-def Confusion():
-    classifier = svm.SVC(kernel="linear", C=0.1).fit(X_train, y_train)
-    np.set_printoptions(precision=2)
-    titles_options = [
-        ("Confusion matrix, without normalization", None),
-        ("Normalized confusion matrix", "true"),
-    ]
-    for title, normalize in titles_options:
-        disp = ConfusionMatrixDisplay.from_estimator(
-            classifier,
-            X_test,
-            y_test,
-            display_labels=y,
-            cmap=plt.cm.Blues,
-            normalize=normalize,
-        )
-        disp.ax_.set_title(title)
-    
-        #print(title)
-        #print(disp.confusion_matrix)
-    
+#Confusion matrix - testing with Error Tolerance https://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html#sphx-glr-auto-examples-model-selection-plot-confusion-matrix-py
+def Confusion_FromEstimator():
+    try:
+        classifier = svm.SVC(kernel="linear", C=0.1).fit(X_train, y_train)
+        np.set_printoptions(precision=2)
+        titles_options = [
+            ("Confusion matrix, without normalization", None),
+            ("Normalized confusion matrix", "true"),
+        ]
+        for title, normalize in titles_options:
+            disp = ConfusionMatrixDisplay.from_estimator(
+                classifier,
+                X_test,
+                y_test,
+                display_labels=y,
+                cmap=plt.cm.Blues,
+                normalize=normalize,
+            )
+            disp.ax_.set_title(title)
+        
+            #print(title)
+            #print(disp.confusion_matrix)
+        plt.show()
+    except:
+        pass
+
+def Confusion_FromPrediction():
+    clf = SVC(random_state=0)
+    clf.fit(X_train, y_train)
+    y_pred = clf.predict(X_test)
+    ConfusionMatrixDisplay.from_predictions(
+       y_test, y_pred)
     plt.show()
 
 # Dimensionality Reduction
+# https://scikit-learn.org/stable/auto_examples/neighbors/plot_nca_dim_reduction.html#sphx-glr-auto-examples-neighbors-plot-nca-dim-reduction-py
+
 def DimenRed():
     n_neighbors = 2
     random_state = 0
@@ -145,19 +148,14 @@ def DimenRed():
     for i, (name, model) in enumerate(dim_reduction_methods):
         plt.figure(figsize=(8, 12), dpi=80)
         # plt.subplot(1, 3, i + 1, aspect=1)
-    
         # Fit the method's model
         model.fit(X_train, y_train)
-    
         # Fit a nearest neighbor classifier on the embedded training set
         knn.fit(model.transform(X_train), y_train)
-    
         # Compute the nearest neighbor accuracy on the embedded test set
         acc_knn = knn.score(model.transform(X_test), y_test)
-    
         # Embed the data set in 2 dimensions using the fitted model
         X_embedded = model.transform(X)
-    
         # Plot the projected points and show the evaluation score
         plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=y, s=30, cmap="Set1")
         plt.title(
@@ -165,7 +163,7 @@ def DimenRed():
         )
     plt.show()
 
-# Feature Importance
+#Feature Importance
 # Based on Impurity
 def ImpurityPermutation():
     forest = RandomForestClassifier(random_state=0)
@@ -181,14 +179,17 @@ def ImpurityPermutation():
     
     #print (std, forest_importances)
     
-    ax.set_title("Feature importances using MDI")
+    ax.set_title("Impurity Permutation using MDI")
     ax.set_ylabel("Mean decrease in impurity")
     fig.set_size_inches(18.5, 10.5, forward=True)
     fig.set_dpi(100)
+    plt.plot(std)
+    score = forest.score(X_test, y_test)
+    print ('Impurity Permutation using MDI: ', score)
+    #np.savetxt("impurity_data.csv", np.c_[X_train,y_train])
     #fig.tight_layout()
 
-# Boxplot Visualisation of Permutation
-def PermutationImportance():
+def FeatureImportance_Boxplot():
     forest = RandomForestClassifier(random_state=0)
     forest.fit(X_train, y_train)
     
@@ -201,13 +202,14 @@ def PermutationImportance():
     ax.boxplot(
         result.importances[sorted_idx].T, vert=False, labels=X_test.columns[sorted_idx]
     )
-    ax.set_title("Permutation Importances (test set)")
+    ax.set_title("Feature Importance - Boxplot")
     fig.set_size_inches(11.5, 17.5, forward=True)
     fig.set_dpi(200)
     plt.show()
+    score = forest.score(X_test, y_test)
+    print ('Feature Importance - Boxplot: ', score)
 
-# Based on Feature Importance
-def FeatImp():
+def FeatureImportance_Bar():
     forest = RandomForestClassifier(random_state=0)
     forest.fit(X_train, y_train)
 
@@ -218,11 +220,15 @@ def FeatImp():
     forest_importances = forest_importances.sort_values()
     fig, ax = plt.subplots()
     forest_importances.plot.bar(yerr=result.importances_std, ax=ax)
-    ax.set_title("Feature importances using permutation on full model")
+    ax.set_title("Feature Importance - Bar Chart")
     ax.set_ylabel("Mean accuracy decrease")
     fig.set_size_inches(18.5, 10.5, forward=True)
     fig.set_dpi(100)
-    plt.show()
+        
+    #np.savetxt("1234.csv", np.c_[x,y])
+
+    score = forest.score(X_test, y_test)
+    print ('Feature Importance - Bar Chart: ', score)
 
 # Correlation Scatterplot + Histograms (without independent variable)
 def correlation():
@@ -254,23 +260,33 @@ def coefvariability():
     plt.xlabel('Coefficient importance')
     plt.title('Coefficient importance and its variability')
     plt.subplots_adjust(left=.3)
+    score = model.score(X_test, y_test)
+    print ('Coefficient importance and its variability: ', score)
+    
+    #Validation Performance
+    result = permutation_importance(model, X_test, y_test, n_repeats=10,
+                                    random_state=0)
+    print(result.importances_mean)
+    print(result.importances_std)
 
 def launch():
-    #correlation()
-    coefvariability()
-    #Confusion()
+    Confusion_FromEstimator()
+    Confusion_FromPrediction()
     #Feature Importance Calculations
     ImpurityPermutation()
-    FeatImp()
-    PermutationImportance()
+    FeatureImportance_Bar()
+    FeatureImportance_Boxplot()
+    coefvariability()
+
     #Correlation
 
-for i in range(1,10):
-    launch()
+#for i in range(1,10):
+launch()
 
 
 '''
 # Comparison Classifier- used it to get understanding on KNeighbors
+# https://scikit-learn.org/stable/auto_examples/classification/plot_classifier_comparison.html
 def ComparClass():
     h = 0.02  # clarify this one
     
