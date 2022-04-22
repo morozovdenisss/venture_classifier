@@ -24,6 +24,16 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import cross_val_score
+import csv
+from pandas import DataFrame, ExcelWriter
+import os
+from sklearn.pipeline import make_pipeline
+from sklearn.linear_model import Ridge
+from sklearn.compose import TransformedTargetRegressor
+from sklearn.compose import make_column_transformer
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.linear_model import LogisticRegression
 
 """
 Knowledge base
@@ -33,8 +43,10 @@ https://scikit-learn.org/stable/tutorial/machine_learning_map/index.html - Good 
 
 # Create automatic Min Max Scaling between 0 - 1 in the future. Excel is much faster.
 
+
 # Open the file and separate into table by ";"
 data=pd.read_csv('CSV_ML_Exits_minmax.csv', sep=';', dtype=None)
+data=data.dropna()
 #print (data.head)
 
 # Split into labels and features - drop Successful as a target in Y
@@ -44,28 +56,17 @@ X = data.iloc[: , :-1]
 X_Headers = list(data.columns.values)
 X_Headers = X_Headers[:-1]
 
+# Open Pandas file and keep writing items
+ImpurityPermutation_Bar  = 'ExportImpurityPermutation_Bar.csv'
+FeatureImportance__Bar = 'ExportFeatureImportance_Bar.csv'
 # For Pairplots
 All_Headers = list(data.columns.values)
-#sns_data = data[All_Headers]
-sns_data = data[['Funding Status', 'Number of VC investors', 'Time between funding and foundation', 'Funding Amount', 'Number of Exits', 'Number of Investments - Funding', 'Founders Gender Diversity']]
-
-# All variables with positive accuracies
 '''
-sns_data = data[['Funding Status', 'Number of VC investors',
-       'Time between funding and foundation', 'Funding Amount', 'Uniqueness',
-       'Number of Exits', 'Number of Exits (IPO)',
-       'Number of Investments - Funding', 'IT Spend to Revenue', 'Specialized',
-       'Number of Portfolio Companies', 'Bounce Rate',
-       'Number of Partner Investments', 'Number of Investments - Founders',
-       'Biography', 'Number of Contacts',
-       'Educational background of the startup founders',
-       'Number of Lead Investments', 'Risk audacious',
-       'Frequency of news on public media', 'Patents - Product',
-       'Page Views / Visit Growth', 'Firm age', 'Founders Gender Diversity']]
+Redacted
 '''
 
 # Split by 20% train/test
-X_train, X_test, y_train, y_test=train_test_split(X,y,test_size=0.2)
+X_train, X_test, y_train, y_test=train_test_split(X,y,test_size=0.2, stratify=y)
  
 #Run prints below if the code breaks
 '''
@@ -102,9 +103,6 @@ def Confusion_FromEstimator():
                 normalize=normalize,
             )
             disp.ax_.set_title(title)
-        
-            #print(title)
-            #print(disp.confusion_matrix)
         plt.show()
     except:
         pass
@@ -117,54 +115,9 @@ def Confusion_FromPrediction():
        y_test, y_pred)
     plt.show()
 
-# Dimensionality Reduction
-# https://scikit-learn.org/stable/auto_examples/neighbors/plot_nca_dim_reduction.html#sphx-glr-auto-examples-neighbors-plot-nca-dim-reduction-py
-
-def DimenRed():
-    n_neighbors = 2
-    random_state = 0
-    #dim = len(X[0])
-    #n_classes = len(np.unique(y))
-    
-    # Reduce dimension to 2 with PCA
-    pca = make_pipeline(StandardScaler(), PCA(n_components=2, random_state=random_state))
-    
-    # Reduce dimension to 2 with LinearDiscriminantAnalysis
-    lda = make_pipeline(StandardScaler(), LinearDiscriminantAnalysis(n_components=2))
-    
-    # Reduce dimension to 2 with NeighborhoodComponentAnalysis
-    nca = make_pipeline(
-        StandardScaler(),
-        NeighborhoodComponentsAnalysis(n_components=2, random_state=random_state),
-    )
-    
-    # Use a nearest neighbor classifier to evaluate the methods
-    knn = KNeighborsClassifier(n_neighbors=n_neighbors)
-    
-    # Make a list of the methods to be compared
-    dim_reduction_methods = [("PCA", pca), ("LDA", lda), ("NCA", nca)]
-    
-    # plt.figure()
-    for i, (name, model) in enumerate(dim_reduction_methods):
-        plt.figure(figsize=(8, 12), dpi=80)
-        # plt.subplot(1, 3, i + 1, aspect=1)
-        # Fit the method's model
-        model.fit(X_train, y_train)
-        # Fit a nearest neighbor classifier on the embedded training set
-        knn.fit(model.transform(X_train), y_train)
-        # Compute the nearest neighbor accuracy on the embedded test set
-        acc_knn = knn.score(model.transform(X_test), y_test)
-        # Embed the data set in 2 dimensions using the fitted model
-        X_embedded = model.transform(X)
-        # Plot the projected points and show the evaluation score
-        plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=y, s=30, cmap="Set1")
-        plt.title(
-            "{}, KNN (k={})\nTest accuracy = {:.2f}".format(name, n_neighbors, acc_knn)
-        )
-    plt.show()
 
 #Feature Importance
-# Based on Impurity
+# Can be misleading for high cardinality features
 def ImpurityPermutation():
     forest = RandomForestClassifier(random_state=0)
     forest.fit(X_train, y_train)
@@ -173,28 +126,30 @@ def ImpurityPermutation():
     
     #Plot
     forest_importances = pd.Series(importances, index=X_Headers)   
-    forest_importances = forest_importances.sort_values()
+    forest_importances = forest_importances.sort_values(ascending=False)
     fig, ax = plt.subplots()
     forest_importances.plot.bar(yerr=std, ax=ax)
-    
-    #print (std, forest_importances)
-    
     ax.set_title("Impurity Permutation using MDI")
     ax.set_ylabel("Mean decrease in impurity")
     fig.set_size_inches(18.5, 10.5, forward=True)
     fig.set_dpi(100)
     plt.plot(std)
+
+    # Scoring & Exporting Datast)
     score = forest.score(X_test, y_test)
-    print ('Impurity Permutation using MDI: ', score)
-    #np.savetxt("impurity_data.csv", np.c_[X_train,y_train])
-    #fig.tight_layout()
+    print ('ImpurityPermutation Acuracy: ', score)
+    df = pd.DataFrame(forest_importances)
+    df.to_csv(ImpurityPermutation_Bar)
+
+# The permutation based importance can be used to overcome drawbacks of default feature importance computed with mean impurity decrease
+# The permutation based importance is computationally expensive. The permutation based method can have problem with highly-correlated features, it can report them as unimportant.
 
 def FeatureImportance_Boxplot():
     forest = RandomForestClassifier(random_state=0)
     forest.fit(X_train, y_train)
     
     result = permutation_importance(
-    forest, X_test, y_test, n_repeats=10, random_state=42, n_jobs=2
+        forest, X_test, y_test, n_repeats=10, random_state=42, n_jobs=2
     )
     sorted_idx = result.importances_mean.argsort()
     
@@ -206,8 +161,10 @@ def FeatureImportance_Boxplot():
     fig.set_size_inches(11.5, 17.5, forward=True)
     fig.set_dpi(200)
     plt.show()
+    
+    # Scoring & Exporting Datast)
     score = forest.score(X_test, y_test)
-    print ('Feature Importance - Boxplot: ', score)
+    print ('Feature Importance - Boxplot Accuracy: ', score)
 
 def FeatureImportance_Bar():
     forest = RandomForestClassifier(random_state=0)
@@ -217,7 +174,7 @@ def FeatureImportance_Bar():
         forest, X_test, y_test, n_repeats=10, random_state=42, n_jobs=2
     )     
     forest_importances = pd.Series(result.importances_mean, index=X_Headers)
-    forest_importances = forest_importances.sort_values()
+    forest_importances = forest_importances.sort_values(ascending=False)
     fig, ax = plt.subplots()
     forest_importances.plot.bar(yerr=result.importances_std, ax=ax)
     ax.set_title("Feature Importance - Bar Chart")
@@ -226,9 +183,12 @@ def FeatureImportance_Bar():
     fig.set_dpi(100)
         
     #np.savetxt("1234.csv", np.c_[x,y])
-
     score = forest.score(X_test, y_test)
-    print ('Feature Importance - Bar Chart: ', score)
+    print ('Feature Importance - Bar Accuracy: ', score)
+    #print ('Feature Importance - Bar Chart: ', forest_importances)
+    
+    df = pd.DataFrame(forest_importances)
+    df.to_csv(FeatureImportance__Bar)
 
 # Correlation Scatterplot + Histograms (without independent variable)
 def correlation():
@@ -238,11 +198,33 @@ def correlation():
     map.map_upper(sns.kdeplot, shade =True)
 
 # Variability of the Coefficients
+# We can check the coefficient variability through cross-validation: it is a form of data perturbation (related to resampling).
+# If coefficients vary significantly when changing the input dataset their robustness is not guaranteed, and they should probably be interpreted with caution.
+# Increase in certain feature means that much increase in importance if positive, and decrease if negative
+
+def RidgeCoef():
+    model = RidgeCV()
+    model.fit(X_train, y_train)
+    coefs = pd.DataFrame(
+       model.coef_,
+       columns=['Coefficients'], index=X_Headers
+    )
+    #print (coefs)
+    coefs = coefs.sort_values(by='Coefficients')
+    df = pd.DataFrame(coefs)
+    df.to_csv('ExportRidgeCoef.csv')
+    
+    coefs.plot(kind="barh", figsize=(26, 24))
+    plt.title("Ridge model, small regularization")
+    plt.axvline(x=0, color=".5")
+    plt.subplots_adjust(left=0.2)
+
+
 def coefvariability():
     model = make_pipeline(StandardScaler(), RidgeCV())
     model.fit(X_train, y_train)
     cv_model = cross_validate(
-       model, X, y, cv=RepeatedKFold(n_splits=5, n_repeats=5),
+       model, X_test, y_test, cv=RepeatedKFold(n_splits=5, n_repeats=5),
        return_estimator=True, n_jobs=2
     )
     coefs = pd.DataFrame(
@@ -260,25 +242,48 @@ def coefvariability():
     plt.xlabel('Coefficient importance')
     plt.title('Coefficient importance and its variability')
     plt.subplots_adjust(left=.3)
+    #print('Coefvariability Array of 3: ', cross_val_score(model, X, y, cv=3))
     score = model.score(X_test, y_test)
-    print ('Coefficient importance and its variability: ', score)
+    #print('Coef', coefs)
+    print ('Coefvariability Score cross_val: ', score)
     
     #Validation Performance
     result = permutation_importance(model, X_test, y_test, n_repeats=10,
                                     random_state=0)
-    print(result.importances_mean)
-    print(result.importances_std)
+    
+    # Export Data in a Hacky Way because dimensions are different
+    a = result.importances_mean
+    b = result.importances_std
+    c = result.importances
+    
+    np.savetxt('ExportCoef-Mean.csv', a)
+    np.savetxt('ExportCoef-STD.csv', b)
+    np.savetxt('ExportCoef-Importances.csv', c)
+    
+    writer = ExcelWriter("ExportCoefVariability_Combined.xlsx")
+    names = ['ExportCoef-Mean.csv', 'ExportCoef-STD.csv', 'ExportCoef-Importances.csv']
+    for filename in names:
+        df_csv = pd.read_csv(filename)
+    
+        (_, f_name) = os.path.split(filename)
+        (f_shortname, _) = os.path.splitext(f_name)
+    
+        df_csv.to_excel(writer, f_shortname, index=False)
+    writer.save()
+
 
 def launch():
+    #Confusion Matrix
     Confusion_FromEstimator()
     Confusion_FromPrediction()
+    
     #Feature Importance Calculations
     ImpurityPermutation()
-    FeatureImportance_Bar()
     FeatureImportance_Boxplot()
+    FeatureImportance_Bar()
+    RidgeCoef()
     coefvariability()
-
-    #Correlation
+    correlation()
 
 #for i in range(1,10):
 launch()
@@ -421,4 +426,51 @@ def ComparClass():
     ax.set_ylabel("Features")
     fig.tight_layout()
     plt.show()
+    
+# Dimensionality Reduction
+# https://scikit-learn.org/stable/auto_examples/neighbors/plot_nca_dim_reduction.html#sphx-glr-auto-examples-neighbors-plot-nca-dim-reduction-py
+
+def DimenRed():
+    n_neighbors = 2
+    random_state = 0
+    #dim = len(X[0])
+    #n_classes = len(np.unique(y))
+    
+    # Reduce dimension to 2 with PCA
+    pca = make_pipeline(StandardScaler(), PCA(n_components=2, random_state=random_state))
+    
+    # Reduce dimension to 2 with LinearDiscriminantAnalysis
+    lda = make_pipeline(StandardScaler(), LinearDiscriminantAnalysis(n_components=2))
+    
+    # Reduce dimension to 2 with NeighborhoodComponentAnalysis
+    nca = make_pipeline(
+        StandardScaler(),
+        NeighborhoodComponentsAnalysis(n_components=2, random_state=random_state),
+    )
+    
+    # Use a nearest neighbor classifier to evaluate the methods
+    knn = KNeighborsClassifier(n_neighbors=n_neighbors)
+    
+    # Make a list of the methods to be compared
+    dim_reduction_methods = [("PCA", pca), ("LDA", lda), ("NCA", nca)]
+    
+    # plt.figure()
+    for i, (name, model) in enumerate(dim_reduction_methods):
+        plt.figure(figsize=(8, 12), dpi=80)
+        # plt.subplot(1, 3, i + 1, aspect=1)
+        # Fit the method's model
+        model.fit(X_train, y_train)
+        # Fit a nearest neighbor classifier on the embedded training set
+        knn.fit(model.transform(X_train), y_train)
+        # Compute the nearest neighbor accuracy on the embedded test set
+        acc_knn = knn.score(model.transform(X_test), y_test)
+        # Embed the data set in 2 dimensions using the fitted model
+        X_embedded = model.transform(X)
+        # Plot the projected points and show the evaluation score
+        plt.scatter(X_embedded[:, 0], X_embedded[:, 1], c=y, s=30, cmap="Set1")
+        plt.title(
+            "{}, KNN (k={})\nTest accuracy = {:.2f}".format(name, n_neighbors, acc_knn)
+        )
+    plt.show()
+
 '''
